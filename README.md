@@ -57,6 +57,11 @@ Python3 should be already installed. Then use `pip` (or `pip3`, if there is a co
 ```
 pip install -r requirements.txt
 ```
+To search for jobs on SuperJob, register the application and get the `secret key` [(API SuperJob)](https://api.superjob.ru/). Create environment variables `.env` with secret key. 
+
+```
+SUPERJOB_KEY=<SUPERJOB_KEY>
+```
 ### Usage
 ```
 python main.py
