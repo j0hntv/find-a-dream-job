@@ -38,8 +38,7 @@ def get_hh_vacancies(language, area_id):
                 'currency': 'RUR',
                 'page': page}
 
-        response = requests.get(url, params=params)
-        response = response.json()
+        response = requests.get(url, params=params).json()
 
         logging.info(f'Page: {page+1}/{response["pages"]}')
 
@@ -55,7 +54,7 @@ def get_hh_vacancies(language, area_id):
             'average_salary': int(salary/found) if found else 0}
 
 
-def get_superjob_vacancies(api_key, language, city):
+def get_superjob_vacancies(api_key, city, language, catalogues_id):
     logging.info(f'Search <{language}> vacancies...')
     url = 'https://api.superjob.ru/2.0/vacancies'
     page = 0
@@ -66,13 +65,12 @@ def get_superjob_vacancies(api_key, language, city):
     while True:
         params = {'town': city,
                     'no_agreement': 1,
-                    'catalogues': 48,
+                    'catalogues': catalogues_id,
                     'page': page,
                     'count': count,
                     'keyword': language}
-        headers = {'X-Api-App-Id': SUPERJOB_KEY}
-        response = requests.get(url, headers=headers, params=params)
-        response = response.json()
+        headers = {'X-Api-App-Id': api_key}
+        response = requests.get(url, headers=headers, params=params).json()
         found = response['total']
 
         pages = found//count + 1
@@ -105,19 +103,19 @@ def print_table(title, vacancies_dict, city):
 
     vacancies.insert(0, columns)
     table_instance = AsciiTable(vacancies, title)
+    print()
     print(table_instance.table)
 
 
-
-if __name__ == '__main__':
+def main():
     load_dotenv()
-    SUPERJOB_KEY = os.getenv('SUPERJOB_KEY')
+    superjob_key = os.getenv('SUPERJOB_KEY')
 
     languages = ('Python', 'Java', 'Kotlin',
                 'C', 'C++', 'C#', 'Ruby', 'Go',
                 '1С', 'JS', 'Php', 'R', 'Swift',
                 'Scala', 'SQL', 'Lua', 'Haskell',
-                'Bash', 'Pascal')
+                'Bash', 'Pascal', 'Erlang')
 
     city = 'Москва'
     city_headhunter_id = get_headhunter_area_id(city)
@@ -129,10 +127,16 @@ if __name__ == '__main__':
     
     print('[*] Собираем данные с SuperJob')
     sj = {}
+    catalogues_id = 48
     for language in languages:
-        sj[language] = get_superjob_vacancies(SUPERJOB_KEY, language, city)
+        sj[language] = get_superjob_vacancies(superjob_key, city, language, catalogues_id)
     
-    print()
     print_table('HeadHunter', hh, city)
-    print()
     print_table('SuperJob', sj, city)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError, KeyError) as error:
+        logging.error(error)
