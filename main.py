@@ -10,8 +10,12 @@ def get_headhunter_area_id(city):
     url = 'https://api.hh.ru/suggests/areas'
     params = {'text': city}
     response = requests.get(url, params=params)
-    items = response.json()['items']
-    return int(items[0]['id'])
+    response.raise_for_status()
+    items = response.json().get('items')
+    if items:
+        return int(items[0]['id'])
+    else:
+        raise requests.exceptions.HTTPError
 
 
 def predict_rub_salary(salary_from, salary_to):
@@ -38,16 +42,23 @@ def get_hh_vacancies(language, area_id):
                 'currency': 'RUR',
                 'page': page}
 
-        response = requests.get(url, params=params).json()
+        response = requests.get(url, params=params)
+        response.raise_for_status()
 
-        logging.info(f'Page: {page+1}/{response["pages"]}')
+        response_json = response.json()
 
-        found = response['found']
-        items = response.get('items')
-        page += 1
-        salary += int(sum(predict_rub_salary(item['salary']['from'], item['salary']['to']) for item in items))
+        pages = response_json.get('pages')
+        found = response_json.get('found')
+        items = response_json.get('items')
 
-        if page == response['pages']:
+        if all((pages, found, items)):
+            logging.info(f'Page: {page+1}/{pages}')
+            page += 1
+            salary += int(sum(predict_rub_salary(item['salary']['from'], item['salary']['to']) for item in items))
+        else:
+            raise requests.exceptions.HTTPError
+
+        if page == response_json['pages']:
             break
 
     return {'vacancies_found': found if found else 0,
@@ -70,21 +81,26 @@ def get_superjob_vacancies(api_key, city, language, catalogues_id):
                     'count': count,
                     'keyword': language}
         headers = {'X-Api-App-Id': api_key}
-        response = requests.get(url, headers=headers, params=params).json()
-        found = response['total']
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
 
+        response_json = response.json()
+        found = response_json.get('total')
         pages = found//count + 1
-        logging.info(f'Page: {page+1}/{pages}')
+        vacancies = response_json.get('objects')
 
-        vacancies = response['objects']
-        for vacancy in vacancies:
-            payment_from = vacancy['payment_from']
-            payment_to = vacancy['payment_to']
-            salary += int(predict_rub_salary(payment_from, payment_to))
+        if all((found, vacancies)):
+            logging.info(f'Page: {page+1}/{pages}')
+            for vacancy in vacancies:
+                payment_from = vacancy['payment_from']
+                payment_to = vacancy['payment_to']
+                salary += int(predict_rub_salary(payment_from, payment_to))
+            
+            page += 1
+        else:
+            raise requests.exceptions.HTTPError
         
-        page += 1
-        
-        if not response['more']:
+        if not response_json['more']:
             break
     
     return {'vacancies_found': found if found else 0,
@@ -138,5 +154,5 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError, KeyError) as error:
+    except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError) as error:
         logging.error(error)
